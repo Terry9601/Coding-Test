@@ -1,0 +1,186 @@
+#include <iostream>
+#include <unordered_map>
+#include <string>
+
+// Mock Bank API class
+// 가상의 은행 API 클래스
+class BankAPI {
+public:
+    // Validates the PIN number for a given card number
+    // 주어진 카드 번호에 대한 PIN 번호를 검증합니다.
+    bool validatePIN(long long cardNumber, int pin) {
+        if (lockedAccounts[cardNumber]) {
+            std::cout << "Account is locked due to too many incorrect PIN attempts.\n";
+            return false;
+        }
+        if (cardPIN[cardNumber] == pin) {
+            pinAttempts[cardNumber] = 0; // Reset PIN attempts on success
+            return true;
+        }
+        else {
+            pinAttempts[cardNumber]++;
+            if (pinAttempts[cardNumber] >= 5) {
+                lockedAccounts[cardNumber] = true; // Lock account after 5 attempts
+                std::cout << "Account locked due to too many incorrect PIN attempts.\n";
+            }
+            return false;
+        }
+    }
+
+    // Retrieves the balance for a given card number and account type
+    // 주어진 카드 번호와 계좌 유형에 대한 잔액을 조회합니다.
+    int getBalance(long long cardNumber, const std::string& accountType) {
+        return accounts[cardNumber][accountType];
+    }
+
+    // Deposits an amount into the given card number and account type
+    // 주어진 카드 번호와 계좌 유형에 금액을 입금합니다.
+    void deposit(long long cardNumber, const std::string& accountType, int amount) {
+        accounts[cardNumber][accountType] += amount;
+    }
+
+    // Withdraws an amount from the given card number and account type
+    // 주어진 카드 번호와 계좌 유형에서 금액을 인출합니다.
+    bool withdraw(long long cardNumber, const std::string& accountType, int amount) {
+        if (accounts[cardNumber][accountType] >= amount) {
+            accounts[cardNumber][accountType] -= amount;
+            return true;
+        }
+        return false;
+    }
+
+private:
+    // Mock card PIN storage
+    // 가상의 카드 PIN 저장소
+    std::unordered_map<long long, int> cardPIN = { {1234123412341234, 1234} };
+
+    // Mock account storage
+    // 가상의 계좌 저장소
+    std::unordered_map<long long, std::unordered_map<std::string, int>> accounts = {
+        {1234123412341234, {{"savings", 1000}, {"checking", 500}}}
+    };
+
+    // Track PIN attempts
+    // PIN 시도 횟수 추적
+    std::unordered_map<long long, int> pinAttempts = { {1234123412341234, 0} };
+
+    // Track locked accounts
+    // 잠긴 계좌 추적
+    std::unordered_map<long long, bool> lockedAccounts = { {1234123412341234, false} };
+};
+
+// ATM Controller class
+// ATM 제어기 클래스
+class ATMController {
+public:
+    ATMController(BankAPI& bankAPI) : bankAPI(bankAPI) {}
+
+    // Starts the ATM operation
+    // ATM 작동을 시작합니다.
+    void start() {
+        while (true) {
+            if (!processCard()) break;
+            if (!processPIN()) continue;
+            while (true) {
+                if (!processAccount()) break;
+                if (!processTransaction()) break;
+                if (!returnToMainMenu()) break;
+            }
+        }
+    }
+
+private:
+    BankAPI& bankAPI;
+    long long currentCardNumber;
+    std::string currentAccountType;
+
+    // Process card insertion
+    // 카드 삽입 처리
+    bool processCard() {
+        std::cout << "\nInsert Card (Enter Card Number or 0 to Exit): ";
+        std::cin >> currentCardNumber;
+        return currentCardNumber != 0;
+    }
+
+    // Process PIN entry and validation
+    // PIN 입력 및 검증 처리
+    bool processPIN() {
+        int pin;
+        std::cout << "Enter PIN (or 0 to Exit): ";
+        std::cin >> pin;
+        if (pin == 0) return false;
+        if (bankAPI.validatePIN(currentCardNumber, pin)) {
+            std::cout << "PIN validated successfully.\n";
+            return true;
+        }
+        std::cout << "Invalid PIN.\n";
+        return processPIN();
+    }
+
+    // Process account selection
+    // 계좌 선택 처리
+    bool processAccount() {
+        int choice;
+        std::cout << "Select Account Type:\n1. Savings\n2. Checking\n0. Exit\nChoice: ";
+        std::cin >> choice;
+        if (choice == 0) return false;
+        if (choice == 1) currentAccountType = "savings";
+        else if (choice == 2) currentAccountType = "checking";
+        else {
+            std::cout << "Invalid choice.\n";
+            return processAccount();
+        }
+        return true;
+    }
+
+    // Process transaction selection and execution
+    // 거래 선택 및 실행 처리
+    bool processTransaction() {
+        int choice;
+        std::cout << "Select Transaction:\n1. See Balance\n2. Deposit\n3. Withdraw\n0. Exit\nChoice: ";
+        std::cin >> choice;
+        if (choice == 0) return false;
+        int amount;
+        switch (choice) {
+        case 1:
+            std::cout << "Current balance: $" << bankAPI.getBalance(currentCardNumber, currentAccountType) << "\n";
+            break;
+        case 2:
+            std::cout << "Enter deposit amount: ";
+            std::cin >> amount;
+            bankAPI.deposit(currentCardNumber, currentAccountType, amount);
+            std::cout << "Deposited $" << amount << ". New balance: $" << bankAPI.getBalance(currentCardNumber, currentAccountType) << "\n";
+            break;
+        case 3:
+            std::cout << "Enter withdrawal amount: ";
+            std::cin >> amount;
+            if (bankAPI.withdraw(currentCardNumber, currentAccountType, amount)) {
+                std::cout << "Withdrew $" << amount << ". New balance: $" << bankAPI.getBalance(currentCardNumber, currentAccountType) << "\n";
+            }
+            else {
+                std::cout << "Insufficient funds.\n";
+            }
+            break;
+        default:
+            std::cout << "Invalid choice.\n";
+            return processTransaction();
+        }
+        return true;
+    }
+
+    // Offer the user to return to the main menu or exit
+    // 사용자가 메인 메뉴로 돌아가거나 시스템을 종료할 수 있도록 합니다.
+    bool returnToMainMenu() {
+        int choice;
+        std::cout << "\nWould you like to:\n1. Return to Account Selection\n2. Exit\nChoice: ";
+        std::cin >> choice;
+        return choice == 1;
+    }
+};
+
+int main() {
+    BankAPI bankAPI;
+    ATMController atm(bankAPI);
+    atm.start();
+    return 0;
+}
